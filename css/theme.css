@@ -1,0 +1,118 @@
+/* =================================================================
+   Yemen Mobile Protection System — Theme tokens
+   Identity: Government + Cyber Security + Mobile Technology
+   ================================================================= */
+
+:root {
+  /* Brand */
+  --c-navy-900: #050d1f;
+  --c-navy-800: #0a1f44;
+  --c-navy-700: #112a5c;
+  --c-navy-600: #1a3a78;
+  --c-blue-500: #2563eb;
+  --c-blue-400: #3b82f6;
+
+  --c-gold-500: #d4af37;
+  --c-gold-400: #e0c25b;
+  --c-gold-300: #ecd98a;
+
+  /* Surfaces (dark default) */
+  --c-bg:        #0a1428;
+  --c-surface:   #10203d;
+  --c-surface-2: #142a52;
+  --c-surface-3: #1a3568;
+  --c-line:      #1e3a72;
+
+  --c-text:      #e8eef9;
+  --c-text-2:    #b6c2d8;
+  --c-text-3:    #8092b0;
+  --c-muted:     #6a7a98;
+
+  /* Semantic */
+  --c-success:    #16a34a;
+  --c-success-bg: #0f3a23;
+  --c-warn:       #d97706;
+  --c-warn-bg:    #3a2710;
+  --c-info:       #0891b2;
+  --c-info-bg:    #0a2a33;
+  --c-pending:    #ca8a04;
+  --c-pending-bg: #2e2308;
+  --c-danger:     #dc2626;
+  --c-danger-bg:  #3a0f0f;
+  --c-suspicious: #7c3aed;
+  --c-suspicious-bg: #2a1654;
+
+  /* Effects */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 6px 18px rgba(0,0,0,.35);
+  --shadow-lg: 0 20px 50px rgba(0,0,0,.5);
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --t-fast: 140ms ease;
+  --t:      220ms ease;
+  --t-slow: 380ms ease;
+
+  --appbar-h: 64px;
+  --sidenav-w: 264px;
+
+  --font-ar: "Cairo","Tajawal","Segoe UI",Tahoma,system-ui,sans-serif;
+}
+
+/* Light theme override (optional) */
+[data-theme="light"] {
+  --c-bg:        #f4f6fb;
+  --c-surface:   #ffffff;
+  --c-surface-2: #f0f3fa;
+  --c-surface-3: #e6ecf7;
+  --c-line:      #dbe2f0;
+  --c-text:      #0a1f44;
+  --c-text-2:    #33425e;
+  --c-text-3:    #58698a;
+  --c-muted:     #8693ad;
+  --shadow-md:   0 6px 18px rgba(10,31,68,.08);
+  --shadow-lg:   0 20px 50px rgba(10,31,68,.12);
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-ar);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, rgba(37,99,235,.12), transparent 60%),
+    radial-gradient(900px 500px at 110% 0%, rgba(212,175,55,.07), transparent 60%),
+    var(--c-bg);
+  color: var(--c-text);
+  font-size: 14.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  padding-top: var(--appbar-h);
+  padding-bottom: 28px;
+}
+
+::selection { background: rgba(212,175,55,.35); color: #fff; }
+
+a { color: var(--c-blue-400); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -.01em; }
+h1 { font-size: 22px; }
+h2 { font-size: 18px; }
+h3 { font-size: 16px; }
+p  { margin: 0; }
+
+.muted { color: var(--c-muted); }
+.small { font-size: 12px; }
+.mono  { font-family: ui-monospace, "JetBrains Mono", Menlo, monospace; }
+.center{ text-align: center; }
+.hide  { display: none !important; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--c-navy-600); }

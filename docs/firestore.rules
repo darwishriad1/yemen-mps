@@ -1,0 +1,138 @@
+rules_version = '2';
+
+// =================================================================
+// Yemen MPS — Firestore Security Rules
+// القواعد تنفّذ:
+//   - RBAC: الدور (Role)
+//   - PBAC: الصلاحيات (Permissions)
+//   - Organization + Geographic + Data scope
+//   - لا توجد ثقة بدون تحقق
+// ملاحظة: Custom Claims مثل {role, districtId, shopId, isMainAccount}
+//   يتم ضبطها عبر Cloud Function أو نص Admin SDK — لا تُمنح من الواجهة.
+// =================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSigned() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // قراءة ملف المستخدم الحالي
+    function selfUser() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
+    }
+    function isMain() {
+      return isSigned() && selfUser().isMainAccount == true && selfUser().status == "ACTIVE";
+    }
+    function statusActive() {
+      return isSigned() && selfUser().status == "ACTIVE";
+    }
+    function hasRole(r) {
+      return isSigned() && selfUser().role == r;
+    }
+    function hasAnyRole(roles) {
+      return isSigned() && selfUser().role in roles;
+    }
+    function hasPerm(p) {
+      return isSigned() && (isMain() || p in selfUser().permissions);
+    }
+
+    // النطاق الجغرافي: يمكن للمستخدم الوصول للبيانات في نطاقه فقط
+    function inScope(data) {
+      return isMain()
+          || (selfUser().districtId != null && data.districtId == selfUser().districtId)
+          || (selfUser().policeStationId != null && data.policeStationId == selfUser().policeStationId)
+          || (selfUser().shopId != null && data.shopId == selfUser().shopId);
+    }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      allow read: if isSigned() && (uid() == userId || hasPerm("USER_VIEW"));
+      allow create: if isMain() || hasAnyRole(["CENTRAL_ADMIN","DISTRICT_ADMIN"]) && hasPerm("USER_CREATE");
+      allow update: if isMain()
+                    || (uid() == userId && selfUser().role == resource.data.role) // لا يعدّل دور نفسه
+                    || hasAnyRole(["CENTRAL_ADMIN","DISTRICT_ADMIN"]) && hasPerm("USER_UPDATE");
+      allow delete: if isMain();
+    }
+
+    // ---------- devices ----------
+    match /devices/{imei} {
+      allow read: if hasPerm("DEVICE_VIEW");
+      allow create: if hasAnyRole(["MINISTRY_ADMIN","CENTRAL_ADMIN","DISTRICT_ADMIN"])
+                    && hasPerm("DEVICE_CREATE");
+      allow update: if hasAnyRole(["MINISTRY_ADMIN","CENTRAL_ADMIN","DISTRICT_ADMIN"])
+                    && hasPerm("DEVICE_UPDATE");
+      allow delete: if isMain();
+    }
+
+    // ---------- ownership ----------
+    match /ownershipRecords/{id} {
+      allow read: if hasPerm("OWNERSHIP_VIEW");
+      allow create: if hasPerm("OWNERSHIP_TRANSFER");
+      allow update, delete: if isMain();
+    }
+
+    // ---------- sales ----------
+    match /sales/{id} {
+      allow read: if hasPerm("SALE_VIEW") && inScope(resource.data);
+      allow create: if hasPerm("SALE_CREATE") && request.resource.data.employeeUid == uid();
+      allow update, delete: if isMain();
+    }
+
+    // ---------- used purchases ----------
+    match /usedPhonePurchases/{id} {
+      allow read: if hasPerm("USED_PURCHASE_VIEW") && inScope(resource.data);
+      allow create: if hasPerm("USED_PURCHASE_CREATE") && request.resource.data.employeeUid == uid();
+      allow update, delete: if isMain();
+    }
+
+    // ---------- police reports ----------
+    match /policeReports/{id} {
+      allow read: if hasPerm("REPORT_VIEW") && inScope(resource.data);
+      allow create: if hasPerm("REPORT_CREATE");
+      allow update: if hasPerm("REPORT_UPDATE") && inScope(resource.data);
+      allow delete: if isMain();
+    }
+
+    // ---------- shops ----------
+    match /shops/{id} {
+      allow read: if hasPerm("SHOP_VIEW");
+      allow create: if hasPerm("SHOP_CREATE");
+      allow update: if hasPerm("SHOP_UPDATE") || isMain();
+      allow delete: if isMain();
+    }
+
+    // ---------- alerts ----------
+    match /alerts/{id} {
+      allow read: if inScope(resource.data) || isMain();
+      allow create: if isMain() || hasAnyRole(["MINISTRY_ADMIN","CENTRAL_ADMIN","DISTRICT_ADMIN","POLICE_ADMIN"]);
+      allow update: if isSigned() && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read","readBy"]));
+      allow delete: if isMain();
+    }
+
+    // ---------- audit logs ----------
+    match /auditLogs/{id} {
+      allow read: if hasPerm("AUDIT_VIEW");
+      allow create: if isSigned(); // كل عملية حساسة تُسجَّل
+      allow update, delete: if false; // سجل ثابت لا يُعدَّل
+    }
+
+    // ---------- organizations, districts, policeStations, settings ----------
+    match /organizations/{id} { allow read: if isSigned(); allow write: if isMain(); }
+    match /districts/{id}     { allow read: if isSigned(); allow write: if isMain(); }
+    match /policeStations/{id}{ allow read: if isSigned(); allow write: if isMain(); }
+    match /settings/{id}      { allow read: if isSigned(); allow write: if hasPerm("SETTINGS_MANAGE"); }
+
+    // ---------- citizens (مستقبلاً) ----------
+    match /citizens/{id} {
+      allow read: if isSigned() && (uid() == id || hasPerm("DEVICE_SEARCH"));
+      allow create: if isMain();
+      allow update: if uid() == id || isMain();
+      allow delete: if isMain();
+    }
+  }
+}
