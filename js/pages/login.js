@@ -1,7 +1,7 @@
 // =================================================================
 // pages/login.js
 // =================================================================
-import { signInWithEmail, signInWithGoogle, resetPassword } from "../auth.js";
+import { signInWithEmail, signInWithGoogle, resetPassword, enterDemo, availableDemoRoles } from "../auth.js";
 import { watchAuth, getSession, isFirebaseConfigured } from "../firebase.js";
 import { toast, icon, openModal, closeModal } from "../ui.js";
 import { go } from "../router.js";
@@ -10,6 +10,8 @@ import { ROLE_LABELS } from "../permissions.js";
 export async function render(main) {
   // إذا كان في جلسة بالفعل، انتقل للرئيسية
   if (getSession()) { go("/dashboard"); return; }
+
+  const demoUsers = availableDemoRoles();
 
   main.innerHTML = `
     <div class="auth-wrap">
@@ -44,6 +46,7 @@ export async function render(main) {
 
         <div class="row" style="justify-content:space-between; margin-top: 8px;">
           <button class="btn btn--ghost btn--sm" id="forgotBtn" type="button">نسيت كلمة المرور؟</button>
+          <button class="btn btn--gold btn--sm" id="demoBtn" type="button">🚀 دخول تجريبي</button>
         </div>
 
         <p class="auth-note">
@@ -58,9 +61,41 @@ export async function render(main) {
             <div>
               <b>Firebase غير مُهيأ.</b>
               افتح <span class="kbd">js/firebase.js</span> واملأ إعدادات مشروعك (apiKey, projectId, ...).
-              حتى ذلك الحين، تسجيل الدخول لن يعمل وستظهر رسائل توضيحية.
+              أو استخدم <b>الدخول التجريبي</b> لاستكشاف الواجهة مباشرة.
             </div>
           </div>` : ""}
+      </div>
+    </div>
+
+    <!-- Modal: Demo Mode اختيار الدور -->
+    <div class="modal" id="demoModal" hidden>
+      <div class="modal__backdrop" data-demo-close></div>
+      <div class="modal__panel" style="width:min(720px,96vw)">
+        <div class="modal__head">
+          <h3 class="modal__title">🚀 الدخول التجريبي</h3>
+          <button class="iconbtn" data-demo-close aria-label="إغلاق">${icon("x")}</button>
+        </div>
+        <div class="modal__body">
+          <p class="small" style="margin-bottom:12px">اختر الدور الذي تريد تجربته. البيانات وهمية وتختفي عند إعادة تحميل الصفحة.</p>
+          <div class="grid grid--2" id="demoList">
+            ${demoUsers.map(u => `
+              <button class="card demo-card" data-role="${u.key}" style="text-align:start;cursor:pointer">
+                <div class="row" style="gap:10px;align-items:flex-start">
+                  <div class="userchip__avatar" style="width:42px;height:42px;font-size:16px">${u.fullName?.charAt(0) || "؟"}</div>
+                  <div style="flex:1;min-width:0">
+                    <b style="display:block">${u.fullName}</b>
+                    <span class="small muted">${ROLE_LABELS[u.role] || u.role}</span>
+                    <div class="small" style="margin-top:4px">📍 ${u.governorateName} — ${u.districtName}${u.shopName ? ` — ${u.shopName}` : ""}</div>
+                    ${u.isMainAccount ? '<span class="pill" style="margin-top:6px;display:inline-block">⭐ حساب رئيسي</span>' : ""}
+                  </div>
+                </div>
+              </button>
+            `).join("")}
+          </div>
+        </div>
+        <div class="modal__foot">
+          <button class="btn btn--ghost" data-demo-close>إلغاء</button>
+        </div>
       </div>
     </div>
   `;
@@ -128,4 +163,27 @@ export async function render(main) {
 
   // إذا تم تسجيل الدخول بالفعل
   watchAuth((u) => { if (u) go("/dashboard"); });
+
+  // --- زر الدخول التجريبي ---
+  const demoBtn = document.getElementById("demoBtn");
+  const demoModal = document.getElementById("demoModal");
+  if (demoBtn && demoModal) {
+    demoBtn.addEventListener("click", () => { demoModal.hidden = false; });
+    demoModal.querySelectorAll("[data-demo-close]").forEach(el => {
+      el.addEventListener("click", () => { demoModal.hidden = true; });
+    });
+    demoModal.querySelectorAll("[data-role]").forEach(card => {
+      card.addEventListener("click", async () => {
+        const role = card.dataset.role;
+        try {
+          await enterDemo(role);
+          toast("تم الدخول التجريبي — البيانات وهمية", "success", { title: "وضع تجريبي", timeout: 4000 });
+          demoModal.hidden = true;
+          setTimeout(() => go("/dashboard"), 200);
+        } catch (e) {
+          toast("تعذر الدخول التجريبي", "danger");
+        }
+      });
+    });
+  }
 }

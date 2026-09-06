@@ -107,10 +107,46 @@ function boot() {
     renderUserChip(user);
     renderNav(user);
     refreshAlertsDot(user);
+    renderDemoBanner(user);
     if (!user && !location.hash.startsWith("#/login")) location.hash = "#/login";
     if (user && (location.hash === "" || location.hash === "#" || location.hash === "#/login")) {
       location.hash = "#/dashboard";
     }
+  });
+}
+
+// ---------- Demo Mode banner ----------
+function renderDemoBanner(user) {
+  // إزالة أي banner قديم
+  const old = document.getElementById("demoBanner");
+  if (old) old.remove();
+  if (!user) return;
+  // هل هو demo mode؟
+  const isDemo = user.uid && String(user.uid).startsWith("demo_");
+  if (!isDemo) return;
+  const banner = document.createElement("div");
+  banner.id = "demoBanner";
+  banner.style.cssText = `
+    position: sticky; top: var(--appbar-h); z-index: 30;
+    background: linear-gradient(90deg, #d4af37, #b48a18);
+    color: #1a1500; font-weight: 700; font-size: 12.5px;
+    padding: 8px 14px; text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2);
+  `;
+  banner.innerHTML = `
+    <span>🚀</span>
+    <span>وضع تجريبي — البيانات وهمية وتختفي عند إعادة التحميل</span>
+    <button id="exitDemoBtn" style="background:rgba(0,0,0,.18); border:none; color:#1a1500; padding:3px 10px; border-radius:5px; cursor:pointer; font:inherit; font-weight:700">إنهاء والخروج</button>
+  `;
+  const main = document.getElementById("main");
+  if (main && main.parentNode) main.parentNode.insertBefore(banner, main);
+  document.getElementById("exitDemoBtn").addEventListener("click", async () => {
+    const { setDemoMode, clearSession } = await import("./firebase.js");
+    setDemoMode(false);
+    clearSession();
+    location.hash = "#/login";
+    location.reload();
   });
 }
 

@@ -1,9 +1,10 @@
 // =================================================================
-// auth.js — Authentication: Email/Password + Google SSO
+// auth.js — Authentication: Email/Password + Google SSO + Demo Mode
 // =================================================================
 import { ensureFirebase, isFirebaseConfigured,
          signInWithEmailAndPassword, signInWithPopup,
-         sendPasswordResetEmail, logAudit }
+         sendPasswordResetEmail, logAudit,
+         setDemoMode, demoUserFor, setSession, clearSession, listDemoUsers }
   from "./firebase.js";
 import { toast } from "./ui.js";
 import { ROLE_LABELS } from "./permissions.js";
@@ -39,10 +40,32 @@ export async function resetPassword(email) {
 }
 
 export async function signOut() {
+  const { isDemoMode, setDemoMode } = await import("./firebase.js");
+  if (isDemoMode()) {
+    setDemoMode(false);
+    clearSession();
+    toast("تم الخروج من الوضع التجريبي", "success");
+    location.hash = "#/login";
+    return;
+  }
   const { getAuth, signOut: fbSignOut } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
   await logAudit("AUTH_LOGOUT");
   await fbSignOut(getAuth());
   location.hash = "#/login";
+}
+
+// دخول تجريبي — يحاكي جلسة Firebase بمستخدم وهمي
+export async function enterDemo(role) {
+  const u = demoUserFor(role);
+  if (!u) throw new Error("Unknown demo role: " + role);
+  setDemoMode(true);
+  setSession(u);
+  await logAudit("DEMO_LOGIN", { role });
+  return u;
+}
+
+export function availableDemoRoles() {
+  return listDemoUsers();
 }
 
 async function getAuthRef() {
