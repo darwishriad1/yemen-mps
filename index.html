@@ -95,26 +95,38 @@
   </footer>
 
   <!-- ============== SCRIPTS ============== -->
-  <script type="module" src="js/firebase.js"></script>
-  <script type="module" src="js/auth.js"></script>
-  <script type="module" src="js/permissions.js"></script>
-  <script type="module" src="js/ui.js"></script>
-  <script type="module" src="js/router.js"></script>
-  <script type="module" src="js/pages/login.js"></script>
-  <script type="module" src="js/pages/dashboard.js"></script>
-  <script type="module" src="js/pages/imei.js"></script>
-  <script type="module" src="js/pages/devices.js"></script>
-  <script type="module" src="js/pages/reports.js"></script>
-  <script type="module" src="js/pages/shops.js"></script>
-  <script type="module" src="js/pages/users.js"></script>
-  <script type="module" src="js/pages/alerts.js"></script>
-  <script type="module" src="js/pages/audit.js"></script>
-  <script type="module" src="js/pages/settings.js"></script>
-  <script type="module" src="js/pages/sales.js"></script>
-  <script type="module" src="js/pages/used.js"></script>
-  <script type="module" src="js/pages/shop-panel.js"></script>
-  <script type="module" src="js/pages/police-panel.js"></script>
-  <script type="module" src="js/pages/profile.js"></script>
+  <!-- Inline bootstrap (immediate, no modules) -->
+  <script>
+    // Emergency inline bootstrap — يضمن عرض Login على الأقل
+    (function() {
+      const main = document.getElementById('main');
+      const appbar = document.getElementById('appbar');
+      if (appbar) appbar.style.display = 'none';
+      const sidenav = document.getElementById('sidenav');
+      if (sidenav) sidenav.style.display = 'none';
+      if (main) {
+        main.style.marginInlineStart = '0';
+        main.innerHTML = `
+          <div class="auth-wrap">
+            <div class="auth-card" style="text-align:center">
+              <div class="auth-illu"></div>
+              <div class="auth-card__brand">
+                <div class="brand__mark" style="color:#d4af37;font-size:48px">🛡️</div>
+                <h1>نظام حماية وتتبع الهواتف</h1>
+                <p>الجمهورية اليمنية</p>
+              </div>
+              <div style="padding:20px">
+                <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
+                <p style="margin-top:12px;color:#94a3b8">جاري تحميل النظام...</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    })();
+  </script>
+
+  <!-- Main app as a single module entry -->
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

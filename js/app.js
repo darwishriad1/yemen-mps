@@ -1,48 +1,36 @@
 // =================================================================
-// app.js — App bootstrap: sidenav, user chip, alerts, router start
+// app.js — نقطة الدخول الموحدة (Single Entry Point)
+// يحوي: Bootstrap + Router + Sidenav + Login عرض
 // =================================================================
-import { getSession, watchAuth } from "./firebase.js";
-import { navItemsFor, can, PERMISSIONS } from "./permissions.js";
-import { icon, toast } from "./ui.js";
-import { startRouter, go } from "./router.js";
+import { getSession, watchAuth, isDemoMode, setDemoMode, clearSession,
+         listDemoUsers, isFirebaseConfigured }
+  from "./firebase.js";
 
-// ---------- Sidenav render ----------
-function renderNav(user) {
-  const nav = document.getElementById("sidenavNav");
-  if (!nav) return;
-  if (!user) { nav.innerHTML = ""; return; }
-
-  const items = navItemsFor(user).filter(it => !it.perm || can(user, it.perm));
-
-  const html = items.map(it => {
-    if (it.group) return `<div class="sidenav__group">${it.group}</div>`;
-    return `<a class="navlink" data-route="${it.href.replace(/^#/, "")}" href="${it.href}">
-      ${icon(it.icon)} <span>${it.label}</span>
-    </a>`;
-  }).join("");
-
-  nav.innerHTML = html + `
-    <div class="sidenav__group">الحساب</div>
-    <a class="navlink" data-route="/profile" href="#/profile">${icon("user")} <span>الملف الشخصي</span></a>
-    <a class="navlink" id="logoutBtn" href="javascript:void(0)">${icon("logout")} <span>تسجيل الخروج</span></a>
-  `;
-
-  document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-    const { isDemoMode, setDemoMode, clearSession, ensureFirebase, getDb, getAuth } = await import("./firebase.js");
-    if (isDemoMode()) {
-      setDemoMode(false); clearSession();
-      toast("تم الخروج من الوضع التجريبي", "success");
-      location.hash = "#/login";
-      return;
-    }
-    try {
-      await ensureFirebase();
-      const { getAuth: ga, signOut } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
-      await signOut(ga());
-      toast("تم تسجيل الخروج", "success");
-    }
-    catch (e) { toast("تعذر تسجيل الخروج", "danger"); }
-  });
+// ---------- Sidenav state ----------
+function showSidenavFor(user) {
+  const appbar = document.getElementById("appbar");
+  const sidenav = document.getElementById("sidenav");
+  const backdrop = document.getElementById("backdrop");
+  if (appbar) appbar.style.display = "";
+  if (sidenav) sidenav.style.display = "";
+  if (window.innerWidth > 900) {
+    sidenav?.classList.remove("is-closed");
+  } else {
+    sidenav?.classList.add("is-closed");
+  }
+  if (backdrop) backdrop.hidden = true;
+  const main = document.getElementById("main");
+  if (main) main.style.marginInlineStart = "";
+}
+function hideChromeForLogin() {
+  const appbar = document.getElementById("appbar");
+  const sidenav = document.getElementById("sidenav");
+  const backdrop = document.getElementById("backdrop");
+  if (appbar) appbar.style.display = "none";
+  if (sidenav) sidenav.style.display = "none";
+  if (backdrop) backdrop.hidden = true;
+  const main = document.getElementById("main");
+  if (main) main.style.marginInlineStart = "0";
 }
 
 // ---------- User chip ----------
@@ -57,107 +45,148 @@ function renderUserChip(user) {
   av.textContent = (user.fullName || user.email || "؟").trim().charAt(0);
 }
 
-// ---------- Mobile menu toggle ----------
-function setupMenu() {
-  const btn = document.getElementById("btnMenu");
-  const sidenav = document.getElementById("sidenav");
-  const backdrop = document.getElementById("backdrop");
-  if (!btn) return;
-  btn.addEventListener("click", () => {
-    sidenav.classList.toggle("is-open");
-    backdrop.hidden = !sidenav.classList.contains("is-open");
-  });
-  backdrop.addEventListener("click", () => {
-    sidenav.classList.remove("is-open");
-    backdrop.hidden = true;
+// ---------- Build Sidenav ----------
+async function buildSidenav(user) {
+  const nav = document.getElementById("sidenavNav");
+  if (!nav || !user) return;
+  const { navItemsFor, can, PERMISSIONS } = await import("./permissions.js");
+  const { icon } = await import("./ui.js");
+  const items = navItemsFor(user).filter(it => !it.perm || can(user, it.perm));
+  const html = items.map(it => {
+    if (it.group) return `<div class="sidenav__group">${it.group}</div>`;
+    return `<a class="navlink" data-route="${it.href.replace(/^#/, "")}" href="${it.href}">
+      ${icon(it.icon)} <span>${it.label}</span>
+    </a>`;
+  }).join("");
+  nav.innerHTML = html + `
+    <div class="sidenav__group">الحساب</div>
+    <a class="navlink" data-route="/profile" href="#/profile">${icon("user")} <span>الملف الشخصي</span></a>
+    <a class="navlink" id="logoutBtn" href="javascript:void(0)">${icon("logout")} <span>تسجيل الخروج</span></a>
+  `;
+  document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+    const { isDemoMode: isD, setDemoMode: setD, clearSession: cS } = await import("./firebase.js");
+    if (isD()) { setD(false); cS(); location.hash = "#/login"; return; }
+    try {
+      const { getAuth, signOut } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
+      await signOut(getAuth());
+      location.hash = "#/login";
+    } catch (e) { console.warn("logout", e); }
   });
 }
 
-// ---------- Alerts dot ----------
-async function refreshAlertsDot(user) {
-  const dot = document.getElementById("alertsDot");
-  if (!dot) return;
-  if (!user) { dot.hidden = true; return; }
-  // في حال فُقد الاتصال لا نظهر النقطة
-  try {
-    const { getDb, collection, query, where, getDocs, limit } = await import("./firebase.js");
-    const { getFirestore } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js");
-    const db = getFirestore();
-    const q = query(collection(db, "alerts"), where("read", "==", false), limit(20));
-    const snap = await getDocs(q);
-    dot.hidden = snap.empty;
-  } catch { dot.hidden = true; }
-}
-
-// ---------- Clock ----------
-function startClock() {
-  const clock = document.getElementById("clock");
-  if (!clock) return;
-  const update = () => {
-    const d = new Date();
-    const pad = n => String(n).padStart(2, "0");
-    const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    const date = `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
-    const tEl = clock.querySelector(".clock__time");
-    const dEl = clock.querySelector(".clock__date");
-    if (tEl) tEl.textContent = time;
-    if (dEl) dEl.textContent = date;
+// ---------- Page rendering ----------
+async function renderPage(path, main) {
+  // Map path -> module
+  const map = {
+    "/dashboard":   "dashboard",
+    "/imei":        "imei",
+    "/devices":     "devices",
+    "/reports":     "reports",
+    "/shops":       "shops",
+    "/users":       "users",
+    "/alerts":      "alerts",
+    "/audit":       "audit",
+    "/settings":    "settings",
+    "/sales":       "sales",
+    "/sales/new":   "sales",
+    "/used/new":    "used",
+    "/shop-panel":  "shop-panel",
+    "/police-panel":"police-panel",
+    "/profile":     "profile"
   };
-  update();
-  setInterval(update, 1000);
+  const moduleName = map[path] || "dashboard";
+  try {
+    const mod = await import(`./pages/${moduleName}.js`);
+    await mod.render(main);
+  } catch (e) {
+    console.error("Page render error:", e);
+    main.innerHTML = `<div class="card" style="margin:20px">تعذر تحميل الصفحة: ${e.message}</div>`;
+  }
+}
+
+// ---------- Main router ----------
+async function route() {
+  const main = document.getElementById("main");
+  if (!main) return;
+  const hash = (location.hash || "#/dashboard").replace(/^#/, "");
+  const path = hash.split("?")[0] || "/dashboard";
+
+  // صفحة Login
+  if (path === "/login" || (!getSession() && !isDemoMode())) {
+    hideChromeForLogin();
+    try {
+      const login = await import("./pages/login.js");
+      await login.render(main);
+    } catch (e) {
+      console.error("Login render error:", e);
+      main.innerHTML = `<div class="auth-wrap"><div class="auth-card">
+        <h1>خطأ في التحميل</h1>
+        <p>${e.message}</p>
+      </div></div>`;
+    }
+    return;
+  }
+
+  const session = getSession();
+  if (!session) { location.hash = "#/login"; return; }
+
+  showSidenavFor(session);
+  renderUserChip(session);
+
+  // tabil active link
+  document.querySelectorAll(".navlink").forEach(a => a.classList.remove("is-active"));
+  const active = document.querySelector(`.navlink[data-route="${path}"]`);
+  if (active) active.classList.add("is-active");
+
+  main.innerHTML = `<div class="card center" style="margin:20px"><span class="spinner"></span> &nbsp; جاري التحميل...</div>`;
+  await renderPage(path, main);
 }
 
 // ---------- Boot ----------
-function boot() {
-  setupMenu();
-  startClock();
-  startRouter();
+async function boot() {
+  // menu toggle
+  document.getElementById("btnMenu")?.addEventListener("click", () => {
+    document.getElementById("sidenav")?.classList.toggle("is-open");
+    document.getElementById("backdrop")?.classList.toggle("is-open");
+  });
+  document.getElementById("backdrop")?.addEventListener("click", () => {
+    document.getElementById("sidenav")?.classList.remove("is-open");
+    document.getElementById("backdrop")?.classList.remove("is-open");
+  });
 
-  watchAuth((user) => {
-    renderUserChip(user);
-    renderNav(user);
-    refreshAlertsDot(user);
-    renderDemoBanner(user);
-    if (!user && !location.hash.startsWith("#/login")) location.hash = "#/login";
-    if (user && (location.hash === "" || location.hash === "#" || location.hash === "#/login")) {
-      location.hash = "#/dashboard";
+  // close mobile menu on nav click
+  document.addEventListener("click", (e) => {
+    if (e.target.closest(".navlink") && window.innerWidth <= 900) {
+      document.getElementById("sidenav")?.classList.remove("is-open");
+      document.getElementById("backdrop")?.classList.remove("is-open");
     }
   });
-}
 
-// ---------- Demo Mode banner ----------
-function renderDemoBanner(user) {
-  // إزالة أي banner قديم
-  const old = document.getElementById("demoBanner");
-  if (old) old.remove();
-  if (!user) return;
-  // هل هو demo mode؟
-  const isDemo = user.uid && String(user.uid).startsWith("demo_");
-  if (!isDemo) return;
-  const banner = document.createElement("div");
-  banner.id = "demoBanner";
-  banner.style.cssText = `
-    position: sticky; top: var(--appbar-h); z-index: 30;
-    background: linear-gradient(90deg, #d4af37, #b48a18);
-    color: #1a1500; font-weight: 700; font-size: 12.5px;
-    padding: 8px 14px; text-align: center;
-    display: flex; align-items: center; justify-content: center; gap: 10px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.2);
-  `;
-  banner.innerHTML = `
-    <span>🚀</span>
-    <span>وضع تجريبي — البيانات وهمية وتختفي عند إعادة التحميل</span>
-    <button id="exitDemoBtn" style="background:rgba(0,0,0,.18); border:none; color:#1a1500; padding:3px 10px; border-radius:5px; cursor:pointer; font:inherit; font-weight:700">إنهاء والخروج</button>
-  `;
-  const main = document.getElementById("main");
-  if (main && main.parentNode) main.parentNode.insertBefore(banner, main);
-  document.getElementById("exitDemoBtn").addEventListener("click", async () => {
-    const { setDemoMode, clearSession } = await import("./firebase.js");
-    setDemoMode(false);
-    clearSession();
-    location.hash = "#/login";
-    location.reload();
+  // Auth watcher
+  watchAuth(async (user) => {
+    if (user) {
+      await buildSidenav(user);
+      renderUserChip(user);
+    } else {
+      renderUserChip(null);
+    }
+    // بعد تغيير الحالة: أعد الـ routing
+    route();
   });
+
+  // Initial route
+  await route();
+
+  // listen hash changes
+  window.addEventListener("hashchange", route);
 }
 
-document.addEventListener("DOMContentLoaded", boot);
+boot().catch(e => {
+  console.error("Boot error:", e);
+  const main = document.getElementById("main");
+  if (main) main.innerHTML = `<div class="auth-wrap"><div class="auth-card">
+    <h1>⚠️ خطأ في تشغيل النظام</h1>
+    <p>${e.message}</p>
+    <p style="font-size:12px;color:#888">افتح Console (F12) للمزيد من التفاصيل.</p>
+  </div></div>`;
+});
