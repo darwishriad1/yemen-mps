@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>تشخيص - Yemen MPS</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #0a1428; color: #e8eef9; line-height: 1.8; }
+    .ok  { color: #4ade80; }
+    .err { color: #f87171; }
+    .warn { color: #fbbf24; }
+    h1 { color: #d4af37; }
+    pre { background: #000; padding: 12px; border-radius: 8px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>🔍 تشخيص Yemen MPS</h1>
+  <div id="out">جاري التحميل...</div>
+
+  <script type="module">
+    const out = document.getElementById('out');
+    function log(msg, type = 'info') {
+      const cls = type === 'ok' ? 'ok' : type === 'err' ? 'err' : type === 'warn' ? 'warn' : '';
+      const d = document.createElement('div');
+      d.className = cls;
+      d.textContent = (type === 'ok' ? '✅ ' : type === 'err' ? '❌ ' : type === 'warn' ? '⚠️ ' : '   ') + msg;
+      out.appendChild(d);
+    }
+    try {
+      log('بدء التحميل...');
+      log('=== اختبار firebase.js ===');
+      const fb = await import('./js/firebase.js');
+      log('firebase.js exports: ' + Object.keys(fb).length + ' keys', 'ok');
+      log('  - isDemoMode: ' + typeof fb.isDemoMode, 'ok');
+      log('  - listDemoUsers: ' + typeof fb.listDemoUsers, 'ok');
+      log('  - watchAuth: ' + typeof fb.watchAuth, 'ok');
+      log('  - checkIMEI: ' + typeof fb.checkIMEI, 'ok');
+
+      const users = fb.listDemoUsers();
+      log('المستخدمون التجريبيون: ' + users.length, 'ok');
+      users.forEach(u => log('  - ' + u.key + ' (' + u.fullName + ')'));
+
+      log('=== اختبار auth.js ===');
+      const auth = await import('./js/auth.js');
+      log('auth.js exports: ' + Object.keys(auth).length + ' keys', 'ok');
+      log('  - enterDemo: ' + typeof auth.enterDemo, 'ok');
+
+      log('=== اختبار permissions.js ===');
+      const perm = await import('./js/permissions.js');
+      log('permissions.js exports: ' + Object.keys(perm).length + ' keys', 'ok');
+
+      log('=== اختبار ui.js ===');
+      const ui = await import('./js/ui.js');
+      log('ui.js exports: ' + Object.keys(ui).length + ' keys', 'ok');
+
+      log('=== اختبار router.js ===');
+      const router = await import('./js/router.js');
+      log('router.js exports: ' + Object.keys(router).length + ' keys', 'ok');
+
+      log('=== اختبار login.js ===');
+      const login = await import('./js/pages/login.js');
+      log('login.js exports: ' + Object.keys(login).length + ' keys', 'ok');
+
+      log('=== محاولة تشغيل login ===');
+      const main = document.getElementById('out');
+      const origHTML = main.innerHTML;
+      try {
+        await login.render(document.body);
+        log('✅ login.render() نجح!', 'ok');
+      } catch (e) {
+        log('❌ login.render() فشل: ' + e.message, 'err');
+        log('Stack: ' + e.stack, 'err');
+        main.innerHTML = origHTML;
+      }
+    } catch (e) {
+      log('❌ خطأ: ' + e.message, 'err');
+      log('Stack: ' + e.stack, 'err');
+    }
+  </script>
+</body>
+</html>
