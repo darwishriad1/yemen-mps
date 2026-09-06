@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>اختبار سريع</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; background: #0a1428; color: #e8eef9; }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    .step { padding: 8px; margin: 4px 0; background: #142a52; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>اختبار تحميل Yemen MPS</h1>
+  <div id="out"></div>
+  <div id="result" style="margin-top:20px;padding:20px;background:#000;border-radius:8px"></div>
+
+  <script>
+    const out = document.getElementById('out');
+    const result = document.getElementById('result');
+    function log(msg, ok = true) {
+      const d = document.createElement('div');
+      d.className = 'step ' + (ok ? 'ok' : 'err');
+      d.textContent = (ok ? '✅ ' : '❌ ') + msg;
+      out.appendChild(d);
+    }
+    // Step 1: هل المتصفح يدعم modules؟
+    log('الخطوة 1: المتصفح يدعم ES Modules: ' + ('noModule' in document.createElement('script')));
+  </script>
+
+  <script type="module">
+    const result = document.getElementById('result');
+    function log(msg, ok = true) {
+      const d = document.createElement('div');
+      d.className = 'step ' + (ok ? 'ok' : 'err');
+      d.textContent = (ok ? '✅ ' : '❌ ') + msg;
+      result.appendChild(d);
+    }
+    try {
+      log('الخطوة 2: بدأ تحميل firebase.js');
+      const fb = await import('./js/firebase.js');
+      log('الخطوة 3: firebase.js تم تحميله بنجاح');
+      log('الخطوة 4: عدد الـ exports: ' + Object.keys(fb).length);
+
+      log('الخطوة 5: عدد المستخدمين التجريبيين: ' + fb.listDemoUsers().length);
+
+      log('الخطوة 6: محاولة استدعاء watchAuth...');
+      let watchAuthResult = 'pending';
+      fb.watchAuth((user) => {
+        log('الخطوة 7: watchAuth callback: user = ' + (user ? user.fullName : 'null'));
+      });
+      // في Demo mode يجب أن يُستدعى فوراً
+
+      log('الخطوة 8: محاولة تحميل login.js...');
+      const login = await import('./js/pages/login.js');
+      log('الخطوة 9: login.js تم تحميله بنجاح');
+
+      log('=== اختبار login.render() ===');
+      const main = document.createElement('div');
+      main.id = 'testmain';
+      document.body.appendChild(main);
+      await login.render(main);
+      log('الخطوة 10: login.render() نجح!');
+
+      const demoBanner = main.querySelector('#demoBannerBtn');
+      log('الخطوة 11: demoBannerBtn موجود: ' + (!!demoBanner));
+
+    } catch (e) {
+      log('❌ خطأ: ' + e.message, false);
+      log('Stack: ' + (e.stack || ''), false);
+    }
+  </script>
+</body>
+</html>
