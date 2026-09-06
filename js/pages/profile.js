@@ -1,8 +1,7 @@
 // =================================================================
 // pages/profile.js — الملف الشخصي
 // =================================================================
-import { getSession, fmtDateTime, fbSignOut } from "../firebase.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+import { getSession, fmtDateTime, isDemoMode, setDemoMode, clearSession, ensureFirebase } from "../firebase.js";
 import { ROLE_LABELS } from "../permissions.js";
 import { icon, toast } from "../ui.js";
 
@@ -62,7 +61,17 @@ export async function render(main) {
   `;
 
   document.getElementById("logoutBtn").addEventListener("click", async () => {
-    try { await fbSignOut(getAuth()); location.hash = "#/login"; }
+    try {
+      if (isDemoMode()) {
+        setDemoMode(false); clearSession();
+        location.hash = "#/login";
+        return;
+      }
+      await ensureFirebase();
+      const { getAuth: ga, signOut } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
+      await signOut(ga());
+      location.hash = "#/login";
+    }
     catch (e) { toast("تعذر تسجيل الخروج", "danger"); }
   });
 }

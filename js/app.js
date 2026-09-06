@@ -28,9 +28,19 @@ function renderNav(user) {
   `;
 
   document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-    const { fbSignOut } = await import("./firebase.js");
-    const { getAuth } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
-    try { await fbSignOut(getAuth()); toast("تم تسجيل الخروج", "success"); }
+    const { isDemoMode, setDemoMode, clearSession, ensureFirebase, getDb, getAuth } = await import("./firebase.js");
+    if (isDemoMode()) {
+      setDemoMode(false); clearSession();
+      toast("تم الخروج من الوضع التجريبي", "success");
+      location.hash = "#/login";
+      return;
+    }
+    try {
+      await ensureFirebase();
+      const { getAuth: ga, signOut } = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
+      await signOut(ga());
+      toast("تم تسجيل الخروج", "success");
+    }
     catch (e) { toast("تعذر تسجيل الخروج", "danger"); }
   });
 }

@@ -60,23 +60,69 @@ export const isFirebaseConfigured = () => isConfigured;
 
 // =================================================================
 //  Auth helpers
+//  الـ Firebase imports تكون lazy/dynamic عبر ensureFirebase()
+//  حتى لا تفشل الواجهة إذا لم يتم تحميل SDK بعد (Demo Mode).
 // =================================================================
-import { onAuthStateChanged, signOut as fbSignOut,
-         signInWithEmailAndPassword, signInWithPopup,
-         createUserWithEmailAndPassword, sendPasswordResetEmail }
-  from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp,
-         collection, query, where, getDocs, addDoc, orderBy, limit,
-         startAt, endAt, onSnapshot, writeBatch, runTransaction }
-  from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
-export {
-  onAuthStateChanged, fbSignOut, signInWithEmailAndPassword, signInWithPopup,
-  createUserWithEmailAndPassword, sendPasswordResetEmail,
-  doc, getDoc, setDoc, updateDoc, serverTimestamp,
-  collection, query, where, getDocs, addDoc, orderBy, limit,
-  startAt, endAt, onSnapshot, writeBatch, runTransaction
-};
+// Cache للـ modules بعد تحميلها
+let _fbAuth = null, _fbFs = null;
+
+async function loadAuthMod() {
+  if (_fbAuth) return _fbAuth;
+  _fbAuth = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js");
+  return _fbAuth;
+}
+async function loadFsMod() {
+  if (_fbFs) return _fbFs;
+  _fbFs = await import("https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js");
+  return _fbFs;
+}
+
+// دوال مُصدَّرة (lazy) — تستدعي الـ SDK فقط عند الاستخدام
+export async function fbOnAuthStateChanged(auth, cb) {
+  const m = await loadAuthMod();
+  return m.onAuthStateChanged(auth, cb);
+}
+export async function fbSignOut(auth) {
+  const m = await loadAuthMod();
+  return m.signOut(auth);
+}
+export async function fbSignInWithEmailAndPassword(auth, email, pw) {
+  const m = await loadAuthMod();
+  return m.signInWithEmailAndPassword(auth, email, pw);
+}
+export async function fbSignInWithPopup(auth, provider) {
+  const m = await loadAuthMod();
+  return m.signInWithPopup(auth, provider);
+}
+export async function fbCreateUserWithEmailAndPassword(auth, email, pw) {
+  const m = await loadAuthMod();
+  return m.createUserWithEmailAndPassword(auth, email, pw);
+}
+export async function fbSendPasswordResetEmail(auth, email) {
+  const m = await loadAuthMod();
+  return m.sendPasswordResetEmail(auth, email);
+}
+export async function fbGoogleAuthProvider() {
+  const m = await loadAuthMod();
+  const p = new m.GoogleAuthProvider();
+  p.setCustomParameters({ prompt: "select_account" });
+  return p;
+}
+
+// Firestore helpers (lazy)
+export async function fsDoc(...args) { const m = await loadFsMod(); return m.doc(...args); }
+export async function fsGetDoc(...args) { const m = await loadFsMod(); return m.getDoc(...args); }
+export async function fsSetDoc(...args) { const m = await loadFsMod(); return m.setDoc(...args); }
+export async function fsUpdateDoc(...args) { const m = await loadFsMod(); return m.updateDoc(...args); }
+export async function fsAddDoc(...args) { const m = await loadFsMod(); return m.addDoc(...args); }
+export async function fsCollection(...args) { const m = await loadFsMod(); return m.collection(...args); }
+export async function fsQuery(...args) { const m = await loadFsMod(); return m.query(...args); }
+export async function fsWhere(...args) { const m = await loadFsMod(); return m.where(...args); }
+export async function fsGetDocs(...args) { const m = await loadFsMod(); return m.getDocs(...args); }
+export async function fsOrderBy(...args) { const m = await loadFsMod(); return m.orderBy(...args); }
+export async function fsLimit(...args) { const m = await loadFsMod(); return m.limit(...args); }
+export async function fsServerTimestamp() { const m = await loadFsMod(); return m.serverTimestamp(); }
 
 // =================================================================
 //  Session — مصادقة + ملف المستخدم
@@ -97,7 +143,8 @@ export function clearSession() {
 // جلب ملف المستخدم من users/{uid}
 export async function fetchUserProfile(uid) {
   await ensureFirebase();
-  const snap = await getDoc(doc(db, "users", uid));
+  const d = await fsDoc(db, "users", uid);
+  const snap = await fsGetDoc(d);
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() };
 }
@@ -112,16 +159,19 @@ export function watchAuth(cb) {
   }
   // ensure SDK is loaded then attach
   ensureFirebase()
-    .then(() => onAuthStateChanged(auth, async (fbUser) => {
-      if (!fbUser) { clearSession(); cb(null); return; }
-      let profile = null;
-      try { profile = await fetchUserProfile(fbUser.uid); }
-      catch (e) { console.error(e); }
-      if (!profile) { clearSession(); cb(null); return; }
-      if (profile.status !== "ACTIVE") { clearSession(); cb(null); return; }
-      setSession({ uid: fbUser.uid, email: fbUser.email, ...profile });
-      cb({ uid: fbUser.uid, email: fbUser.email, ...profile });
-    }))
+    .then(async () => {
+      const { onAuthStateChanged } = await loadAuthMod();
+      onAuthStateChanged(auth, async (fbUser) => {
+        if (!fbUser) { clearSession(); cb(null); return; }
+        let profile = null;
+        try { profile = await fetchUserProfile(fbUser.uid); }
+        catch (e) { console.error(e); }
+        if (!profile) { clearSession(); cb(null); return; }
+        if (profile.status !== "ACTIVE") { clearSession(); cb(null); return; }
+        setSession({ uid: fbUser.uid, email: fbUser.email, ...profile });
+        cb({ uid: fbUser.uid, email: fbUser.email, ...profile });
+      });
+    })
     .catch((e) => { console.warn("Firebase unavailable:", e.message); cb(null); });
 }
 
@@ -134,12 +184,13 @@ export async function checkIMEI(rawImei) {
   if (isDemoMode()) return demoCheckIMEI(imei);
   await ensureFirebase();
   // البحث المباشر بالمعرّف (document id = IMEI)
-  const snap = await getDoc(doc(db, "devices", imei));
+  const d = await fsDoc(db, "devices", imei);
+  const snap = await fsGetDoc(d);
   if (!snap.exists()) {
     // مسح بواسطة IMEI1 أو IMEI2 في حال كانت الوثيقة مُعرّفها UUID
-    const q1 = query(collection(db, "devices"), where("imei1", "==", imei), limit(1));
-    const q2 = query(collection(db, "devices"), where("imei2", "==", imei), limit(1));
-    const [r1, r2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+    const q1 = fsQuery(fsCollection(db, "devices"), fsWhere("imei1", "==", imei), fsLimit(1));
+    const q2 = fsQuery(fsCollection(db, "devices"), fsWhere("imei2", "==", imei), fsLimit(1));
+    const [r1, r2] = await Promise.all([fsGetDocs(q1), fsGetDocs(q2)]);
     const hit = !r1.empty ? r1.docs[0] : (!r2.empty ? r2.docs[0] : null);
     if (!hit) return { status: "UNREGISTERED", imei };
     return { status: hit.data().status || "ACTIVE", device: { id: hit.id, ...hit.data() }, imei };
@@ -158,13 +209,13 @@ export async function logAudit(action, payload = {}) {
   try {
     await ensureFirebase();
     const session = getSession();
-    await addDoc(collection(db, "auditLogs"), {
+    await fsAddDoc(fsCollection(db, "auditLogs"), {
       action, payload,
       actorUid: session?.uid || null,
       actorName: session?.fullName || null,
       actorRole: session?.role || null,
       ip: null, ua: navigator.userAgent,
-      createdAt: serverTimestamp()
+      createdAt: await fsServerTimestamp()
     });
   } catch (e) { console.warn("audit log failed", e); }
 }
@@ -204,13 +255,16 @@ export async function listCollection(name, opts = {}) {
     return list;
   }
   await ensureFirebase();
-  let q = collection(db, name);
+  const col = await fsCollection(db, name);
   const filters = [];
-  if (opts.where && opts.where.length) filters.push(...opts.where);
-  if (opts.order) filters.push(order(opts.order.field, opts.order.dir || "asc"));
-  if (opts.lim) filters.push(limit(opts.lim));
-  if (filters.length) q = query(q, ...filters);
-  const snap = await getDocs(q);
+  if (opts.where && opts.where.length) {
+    for (const w of opts.where) filters.push(await fsWhere(w.field, w.op || "==", w.value));
+  }
+  if (opts.order) filters.push(await fsOrderBy(opts.order.field, opts.order.dir || "asc"));
+  if (opts.lim) filters.push(await fsLimit(opts.lim));
+  let q = col;
+  if (filters.length) q = await fsQuery(q, ...filters);
+  const snap = await fsGetDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
@@ -220,22 +274,25 @@ export async function getOne(name, id) {
     return list.find(x => x.id === id) || null;
   }
   await ensureFirebase();
-  const snap = await getDoc(doc(db, name, id));
+  const d = await fsDoc(db, name, id);
+  const snap = await fsGetDoc(d);
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
 export async function createOne(name, id, data) {
   if (isDemoMode()) return demoCreate(name, id, data);
   await ensureFirebase();
-  const ref = id ? doc(db, name, id) : doc(collection(db, name));
-  await setDoc(ref, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  const ts = await fsServerTimestamp();
+  const ref = id ? await fsDoc(db, name, id) : await fsDoc(await fsCollection(db, name));
+  await fsSetDoc(ref, { ...data, createdAt: ts, updatedAt: ts });
   return ref.id;
 }
 
 export async function updateOne(name, id, data) {
   if (isDemoMode()) return demoUpdate(name, id, data);
   await ensureFirebase();
-  await updateDoc(doc(db, name, id), { ...data, updatedAt: serverTimestamp() });
+  const d = await fsDoc(db, name, id);
+  await fsUpdateDoc(d, { ...data, updatedAt: await fsServerTimestamp() });
 }
 
 export function newId(prefix = "id") {
