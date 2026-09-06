@@ -212,6 +212,7 @@
 
 /* ---------- Modal ---------- */
 .modal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; }
+.modal[hidden] { display: none !important; }
 .modal__backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
 .modal__panel {
   position: relative; z-index: 1; width: min(560px, 92vw);
